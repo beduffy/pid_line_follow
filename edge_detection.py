@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import glob
 
+
 def plot_hough_lines(image, lines):
   """
   Plots all lines returned by cv2.HoughLinesP on top of the original image.
