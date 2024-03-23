@@ -35,3 +35,6 @@ fi
 # fi
 
 tmux attach-session -t $SESSION:0
+
+# run within docker
+# docker run --runtime nvidia -it --rm --network host --volume /tmp/argus_socket:/tmp/argus_socket --volume /etc/enctune.conf:/etc/enctune.conf --volume /etc/nv_tegra_release:/etc/nv_tegra_release --volume /tmp/nv_jetson_model:/tmp/nv_jetson_model --volume /var/run/dbus:/var/run/dbus --volume /var/run/avahi-daemon/socket:/var/run/avahi-daemon/socket --volume /var/run/docker.sock:/var/run/docker.sock --volume /home/general/all_projects/jetson-containers/packages/llm/local_llm:/opt/local_llm/local_llm --volume /home/general/all_projects/jetson-containers/data:/data --device /dev/snd --device /dev/bus/usb --device /dev/video0 --volume /home/general/share_with_docker/:/share_with_docker my_latest_galactic
