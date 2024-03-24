@@ -42,9 +42,10 @@ class ImageProcessor(Node):
         self.cmd_vel_publisher_ = self.create_publisher(Twist, '/cmd_vel', 10)
         # self.cmd_vel_publisher_ = self.create_publisher(Twist, '/turtle1/cmd_vel', 10)
         self.bridge = CvBridge()
-        self.pid = PID(0.01, 0.00, 0.00, setpoint=0)
-        self.linear_speed = 0.05  # Assuming a default linear speed
-        self.linear_speed = 0.003
+        self.pid = PID(0.01, 0.00, 0.00, setpoint=0)  # TODO is setpoint=0 correct?
+        # self.linear_speed = 0.05  # Assuming a default linear speed
+        # self.linear_speed = 0.0
+        self.linear_speed = 0.001
 
     def listener_callback(self, data):
         try:
@@ -60,8 +61,11 @@ class ImageProcessor(Node):
             h, w = gray.shape
             self.image_width = w  # Set the image width for PID calculations
 
+            # blurred_gray = cv2.GaussianBlur(gray, (5, 5), 0)
             blurred_gray = cv2.GaussianBlur(gray, (7, 7), 0)
-            edges = cv2.Canny(blurred_gray, 55, 100, apertureSize=3)
+            # blurred_gray = gray
+            edges = cv2.Canny(blurred_gray, 30, 150, apertureSize=3)
+            edges = cv2.dilate(edges, None, iterations=1)
 
             edges_msg = self.bridge.cv2_to_imgmsg(edges, encoding="mono8")
             self.edges_publisher_.publish(edges_msg)
@@ -70,16 +74,19 @@ class ImageProcessor(Node):
             image_with_contours = image.copy()
 
             center_x = w // 2
-            min_distance = float('inf')
-            chosen_contour = None
-            for contour in contours:
-                M = cv2.moments(contour)
-                if M["m00"] != 0:
-                    cX = int(M["m10"] / M["m00"])
-                    distance = abs(cX - center_x)
-                    if distance < min_distance:
-                        min_distance = distance
-                        chosen_contour = contour
+            if contours:
+                min_distance = float('inf')
+                chosen_contour = contours[0]  # Default to the first contour in case all M["m00"] are 0
+                for contour in contours:
+                    M = cv2.moments(contour)
+                    if M["m00"] != 0:
+                        cX = int(M["m10"] / M["m00"])
+                        distance = abs(cX - center_x)
+                        if distance < min_distance:
+                            min_distance = distance
+                            chosen_contour = contour
+            else:
+                chosen_contour = None
 
             for contour in contours:
                 if np.array_equal(contour, chosen_contour):
@@ -110,7 +117,7 @@ class ImageProcessor(Node):
 
                 # Display the direction information on the image
                 direction_text = "Left" if direction < 0 else "Right"
-                cv2.putText(image_with_contours, f"Direction: {direction_text}, correction: {correction:.2f}, error: {error:.2f}", (10, 30), 
+                cv2.putText(image_with_contours, f"Direction: {direction_text}, correction: {correction:.5f}, error: {error:.2f}", (10, 30), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
 
             # Update the processed image message with the direction information
@@ -131,21 +138,27 @@ class ImageProcessor(Node):
                 # Normalize correction to be proportional to linear speed, ensuring it's within a suitable range for PID control
                 # correction = np.tanh(raw_correction) * 0.05
                 # correction = np.tanh(raw_correction) * 0.01
-                correction = raw_correction * 0.01
-                # correction = 0
+                correction = raw_correction * 0.02
+                
+                # correction = 0.0
                 twist_msg = Twist()
                 twist_msg.linear.x = self.linear_speed
                 twist_msg.angular.z = correction  # Scale down to ensure it's not too high
                 # twist_msg.angular.z = correction * 0.5  # Scale down to ensure it's not too high
+                # twist_msg.linear.x = 0.0
+                # twist_msg.angular.z = 0.0
 
                 print('linear.x:', twist_msg.linear.x, ' angular z:',  correction)
                 self.cmd_vel_publisher_.publish(twist_msg)
+
                 self.get_logger().info(f"Centroid: ({cX}, {cY}), Error: {error}, raw_correction: {raw_correction}, Correction: {correction}")
                 return correction, error, cX, cY
             else:
                 self.get_logger().warn("Chosen contour has zero area, skipping PID control.")
+                return None, None, None, None
         else:
             self.get_logger().warn("No contour chosen, skipping PID control.")
+            return None, None, None, None
         
 
 def main(args=None):
