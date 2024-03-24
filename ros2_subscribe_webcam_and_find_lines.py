@@ -64,7 +64,7 @@ class ImageProcessor(Node):
             # blurred_gray = cv2.GaussianBlur(gray, (5, 5), 0)
             blurred_gray = cv2.GaussianBlur(gray, (7, 7), 0)
             # blurred_gray = gray
-            edges = cv2.Canny(blurred_gray, 30, 150, apertureSize=3)
+            edges = cv2.Canny(blurred_gray, 30, 100, apertureSize=3)
             edges = cv2.dilate(edges, None, iterations=1)
 
             edges_msg = self.bridge.cv2_to_imgmsg(edges, encoding="mono8")
@@ -74,20 +74,23 @@ class ImageProcessor(Node):
             image_with_contours = image.copy()
 
             center_x = w // 2
+            min_contour_points = 50  # Minimum number of points for a contour to be considered
             if contours:
                 min_distance = float('inf')
-                chosen_contour = contours[0]  # Default to the first contour in case all M["m00"] are 0
+                chosen_contour = None  # Initialize with None to handle case where no contour meets criteria
                 for contour in contours:
-                    M = cv2.moments(contour)
-                    if M["m00"] != 0:
-                        cX = int(M["m10"] / M["m00"])
-                        distance = abs(cX - center_x)
-                        if distance < min_distance:
-                            min_distance = distance
-                            chosen_contour = contour
+                    if len(contour) >= min_contour_points:  # Check if contour has enough points
+                        M = cv2.moments(contour)
+                        if M["m00"] != 0:
+                            cX = int(M["m10"] / M["m00"])
+                            distance = abs(cX - center_x)
+                            if distance < min_distance:
+                                min_distance = distance
+                                chosen_contour = contour
+                if chosen_contour is None and contours:  # Fallback to the first contour if none meet the criteria
+                    chosen_contour = contours[0]
             else:
                 chosen_contour = None
-
             for contour in contours:
                 if np.array_equal(contour, chosen_contour):
                     cv2.drawContours(image_with_contours, [contour], -1, (0, 255, 0), 3)
