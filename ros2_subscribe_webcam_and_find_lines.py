@@ -132,33 +132,33 @@ class ImageProcessor(Node):
     
     def use_chosen_contour_for_pid_set_point(self, chosen_contour):
         if chosen_contour is not None:
-            M = cv2.moments(chosen_contour)
-            if M["m00"] != 0:
-                cX = int(M["m10"] / M["m00"])
-                cY = int(M["m01"] / M["m00"])
-                error = cX - self.image_width // 2
-                raw_correction = self.pid(error)  # Changed from self.pid.update(error)
-                # Normalize correction to be proportional to linear speed, ensuring it's within a suitable range for PID control
-                # correction = np.tanh(raw_correction) * 0.05
-                # correction = np.tanh(raw_correction) * 0.01
-                correction = raw_correction * 0.02
-                
-                # correction = 0.0
-                twist_msg = Twist()
-                twist_msg.linear.x = self.linear_speed
-                twist_msg.angular.z = correction  # Scale down to ensure it's not too high
-                # twist_msg.angular.z = correction * 0.5  # Scale down to ensure it's not too high
-                # twist_msg.linear.x = 0.0
-                # twist_msg.angular.z = 0.0
+            y_positions = chosen_contour[:, :, 1].flatten()
+            lowest_y_index = np.argmin(y_positions)
+            lowest_y_point = chosen_contour[lowest_y_index][0]
+            cX, cY = lowest_y_point[0], lowest_y_point[1]
+            error = cX - self.image_width // 2
+            raw_correction = self.pid(error)  # Changed from self.pid.update(error)
+            # Normalize correction to be proportional to linear speed, ensuring it's within a suitable range for PID control
+            # correction = np.tanh(raw_correction) * 0.05
+            # correction = np.tanh(raw_correction) * 0.01
+            correction = raw_correction * 0.02
+            
+            # correction = 0.0
+            twist_msg = Twist()
+            twist_msg.linear.x = self.linear_speed
+            twist_msg.angular.z = correction  # Scale down to ensure it's not too high
+            # twist_msg.angular.z = correction * 0.5  # Scale down to ensure it's not too high
+            # twist_msg.linear.x = 0.0
+            # twist_msg.angular.z = 0.0
 
-                print('linear.x:', twist_msg.linear.x, ' angular z:',  correction)
-                self.cmd_vel_publisher_.publish(twist_msg)
+            print('linear.x:', twist_msg.linear.x, ' angular z:',  correction)
+            self.cmd_vel_publisher_.publish(twist_msg)
 
-                self.get_logger().info(f"Centroid: ({cX}, {cY}), Error: {error}, raw_correction: {raw_correction}, Correction: {correction}")
-                return correction, error, cX, cY
-            else:
-                self.get_logger().warn("Chosen contour has zero area, skipping PID control.")
-                return None, None, None, None
+            self.get_logger().info(f"Centroid: ({cX}, {cY}), Error: {error}, raw_correction: {raw_correction}, Correction: {correction}")
+            return correction, error, cX, cY
+            # else:
+            #     self.get_logger().warn("Chosen contour has zero area, skipping PID control.")
+            #     return None, None, None, None
         else:
             self.get_logger().warn("No contour chosen, skipping PID control.")
             return None, None, None, None
