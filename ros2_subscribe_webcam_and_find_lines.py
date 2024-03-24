@@ -39,10 +39,11 @@ class ImageProcessor(Node):
             10)
         self.publisher_ = self.create_publisher(Image, 'webcam/processed_image', 10)
         self.edges_publisher_ = self.create_publisher(Image, 'webcam/edges_image', 10)
-        self.cmd_vel_publisher_ = self.create_publisher(Twist, '/cmd_vel', 10)
+        # self.cmd_vel_publisher_ = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.cmd_vel_publisher_ = self.create_publisher(Twist, '/turtle1/cmd_vel', 10)
         self.bridge = CvBridge()
         self.pid = PID(0.1, 0.01, 0.01, setpoint=0)
-        self.linear_speed = 0.2  # Assuming a default linear speed
+        self.linear_speed = 0.05  # Assuming a default linear speed
 
     def listener_callback(self, data):
         try:
@@ -82,11 +83,31 @@ class ImageProcessor(Node):
                 else:
                     cv2.drawContours(image_with_contours, [contour], -1, (0, 0, 255), 3)
 
+            # Use the chosen contour to calculate PID and publish cmd_vel
+            correction, cX, cY = self.use_chosen_contour_for_pid_set_point(chosen_contour)
+
+            if chosen_contour is not None and correction is not None:
+                # Calculate the direction vector based on the correction
+                direction = np.sign(correction)
+                arrow_length = 50
+                arrow_thickness = 2
+                arrow_color = (255, 0, 0)  # Red color for the direction arrow
+
+                # Calculate start and end points for the arrow
+                start_point = (cX, cY)
+                end_point = (int(cX + direction * arrow_length), cY)
+
+                # Draw the direction arrow on the image
+                cv2.arrowedLine(image_with_contours, start_point, end_point, arrow_color, arrow_thickness)
+
+                # Display the direction information on the image
+                direction_text = "Left" if direction < 0 else "Right"
+                cv2.putText(image_with_contours, f"Direction: {direction_text}, correction: {correction}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+            # Update the processed image message with the direction information
             processed_image_msg = self.bridge.cv2_to_imgmsg(image_with_contours, encoding="passthrough")
             self.publisher_.publish(processed_image_msg)
 
-            # Use the chosen contour to calculate PID and publish cmd_vel
-            self.use_chosen_contour_for_pid_set_point(chosen_contour)
         except Exception as e:
             self.get_logger().error('Failed to process and publish image: %r' % (e,))
 
@@ -97,12 +118,17 @@ class ImageProcessor(Node):
                 cX = int(M["m10"] / M["m00"])
                 cY = int(M["m01"] / M["m00"])
                 error = cX - self.image_width // 2
-                correction = self.pid(error)  # Changed from self.pid.update(error)
+                raw_correction = self.pid(error)  # Changed from self.pid.update(error)
+                # Normalize correction to be proportional to linear speed, ensuring it's within a suitable range for PID control
+                correction = np.tanh(raw_correction) * 0.05
                 twist_msg = Twist()
                 twist_msg.linear.x = self.linear_speed
-                twist_msg.angular.z = -correction
+                twist_msg.angular.z = -correction * 0.5  # Scale down to ensure it's not too high
+
+                print('linear.x:', twist_msg.linear.x, ' angular z:',  correction)
                 self.cmd_vel_publisher_.publish(twist_msg)
                 self.get_logger().info(f"Centroid: ({cX}, {cY}), Error: {error}, Correction: {correction}")
+                return correction, cX, cY
             else:
                 self.get_logger().warn("Chosen contour has zero area, skipping PID control.")
         else:
