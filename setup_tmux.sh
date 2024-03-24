@@ -16,7 +16,7 @@ then
 
     tmux split-window -h
     tmux send-keys 'sleep 2' C-m
-    tmux send-keys 'sleep 2' C-m
+    tmux send-keys 'python ros2_subscribe_webcam_and_find_lines.py' C-m
 
     tmux select-layout even-vertical
 fi
