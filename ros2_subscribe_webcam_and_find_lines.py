@@ -50,12 +50,6 @@ class ImageProcessor(Node):
 
     def listener_callback(self, data):
         try:
-            # twist_msg = Twist()
-            # twist_msg.linear.x = 0.0
-            # twist_msg.angular.z = 0.01  # Scale down to ensure it's not too high
-            # # twist_msg.angular.z = correction * 0.5  # Scale down to ensure it's not too high
-            # print('linear.x:', twist_msg.linear.x, ' angular z:',  twist_msg.angular.z)
-            # self.cmd_vel_publisher_.publish(twist_msg)
 
             image = self.bridge.compressed_imgmsg_to_cv2(data, desired_encoding='passthrough')
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -103,24 +97,6 @@ class ImageProcessor(Node):
                             max_intersection = intersection_area
                             chosen_contour_pair = (contour1, contour2)
                 chosen_contour = chosen_contour_pair[0] if chosen_contour_pair else None  # Assign the chosen pair to chosen_contour for further processing
-
-            # # After finding contours
-            # color_threshold = 150
-            # for contour in contours:
-            #     if len(contour) >= min_contour_points:  # Check if contour has enough points
-            #         # Create a mask image that contains the contour filled in
-            #         mask = np.zeros_like(gray)
-            #         cv2.drawContours(mask, [contour], -1, color=255, thickness=cv2.FILLED)
-
-            #         # Use the mask to calculate the mean color of the contour area in the original image
-            #         mean_val = cv2.mean(image, mask=mask)
-
-            #         # Check if the mean color is dark (i.e., on the black line)
-            #         # Assuming the image is in BGR format and we're looking for a dark color
-            #         # You may need to adjust the threshold value based on your specific image
-            #         # if mean_val[0] < color_threshold and mean_val[1] < color_threshold and mean_val[2] < color_threshold:
-            #         #     # This contour is on the black line, process it
-            #         #     # ...
 
             for contour in contours:
                 if np.array_equal(contour, chosen_contour):
@@ -182,7 +158,7 @@ class ImageProcessor(Node):
             twist_msg.angular.z = correction  # Scale down to ensure it's not too high
 
             print('linear.x:', twist_msg.linear.x, ' angular z:',  correction)
-            # self.cmd_vel_publisher_.publish(twist_msg)
+            self.cmd_vel_publisher_.publish(twist_msg)
 
             self.get_logger().info(f"Centroid: ({cX}, {cY}), Error: {error}, raw_correction: {raw_correction}, Correction: {correction}")
             return correction, error, cX, cY
