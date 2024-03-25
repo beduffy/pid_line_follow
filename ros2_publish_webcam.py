@@ -11,6 +11,7 @@ class WebcamPublisher(Node):
         self.timer = self.create_timer(0.1, self.timer_callback)
         self.bridge = CvBridge()
         self.cap = cv2.VideoCapture(0)
+        self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     
