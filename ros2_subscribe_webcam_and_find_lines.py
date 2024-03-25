@@ -76,21 +76,55 @@ class ImageProcessor(Node):
             center_x = w // 2
             min_contour_points = 50  # Minimum number of points for a contour to be considered
             if contours:
-                min_distance = float('inf')
+                best_score = float('inf')
                 chosen_contour = None  # Initialize with None to handle case where no contour meets criteria
                 for contour in contours:
                     if len(contour) >= min_contour_points:  # Check if contour has enough points
-                        M = cv2.moments(contour)
-                        if M["m00"] != 0:
-                            cX = int(M["m10"] / M["m00"])
-                            distance = abs(cX - center_x)
-                            if distance < min_distance:
-                                min_distance = distance
-                                chosen_contour = contour
+                        rect = cv2.minAreaRect(contour)  # Get the minimum area rectangle for the contour
+                        box = cv2.boxPoints(rect)  # Get the four points of the rectangle
+                        box = np.int0(box)  # Convert points to integers
+                        width = np.linalg.norm(box[0] - box[1])
+                        height = np.linalg.norm(box[1] - box[2])
+                        aspect_ratio = width / height if width > height else height / width
+                        
+                        # Check if the contour is line-like by its aspect ratio
+                        if 2 < aspect_ratio < 10:  # Adjust the range as necessary
+                            M = cv2.moments(contour)
+                            if M["m00"] != 0:
+                                cX = int(M["m10"] / M["m00"])
+                                cY = int(M["m01"] / M["m00"])
+                                distance = abs(cX - center_x)
+                                # Prioritize contours closer to the bottom of the image (higher y value means lower on the image)
+                                y_priority = (h - cY) / h
+                                # Combine distance, y_priority, and aspect ratio into a single score for comparison
+                                # Adjust weighting as necessary. Here, we give more weight to the y position to prioritize lower contours
+                                score = distance + (y_priority * 100) - (aspect_ratio * 10)  # Subtract aspect ratio to prioritize line-like contours
+                                if score < best_score:
+                                    best_score = score
+                                    chosen_contour = contour
                 if chosen_contour is None and contours:  # Fallback to the first contour if none meet the criteria
                     chosen_contour = contours[0]
             else:
                 chosen_contour = None
+
+            # # After finding contours
+            # color_threshold = 150
+            # for contour in contours:
+            #     if len(contour) >= min_contour_points:  # Check if contour has enough points
+            #         # Create a mask image that contains the contour filled in
+            #         mask = np.zeros_like(gray)
+            #         cv2.drawContours(mask, [contour], -1, color=255, thickness=cv2.FILLED)
+
+            #         # Use the mask to calculate the mean color of the contour area in the original image
+            #         mean_val = cv2.mean(image, mask=mask)
+
+            #         # Check if the mean color is dark (i.e., on the black line)
+            #         # Assuming the image is in BGR format and we're looking for a dark color
+            #         # You may need to adjust the threshold value based on your specific image
+            #         # if mean_val[0] < color_threshold and mean_val[1] < color_threshold and mean_val[2] < color_threshold:
+            #         #     # This contour is on the black line, process it
+            #         #     # ...
+
             for contour in contours:
                 if np.array_equal(contour, chosen_contour):
                     cv2.drawContours(image_with_contours, [contour], -1, (0, 255, 0), 3)
@@ -130,12 +164,13 @@ class ImageProcessor(Node):
         except Exception as e:
             self.get_logger().error(f'Failed to process and publish image: {e}. Exception occurred at line: {e.__traceback__.tb_lineno}')
     
+    
     def use_chosen_contour_for_pid_set_point(self, chosen_contour):
         if chosen_contour is not None:
             y_positions = chosen_contour[:, :, 1].flatten()
-            lowest_y_index = np.argmin(y_positions)
-            lowest_y_point = chosen_contour[lowest_y_index][0]
-            cX, cY = lowest_y_point[0], lowest_y_point[1]
+            highest_y_index = np.argmax(y_positions)
+            highest_y_point = chosen_contour[highest_y_index][0]
+            cX, cY = highest_y_point[0], highest_y_point[1]
             error = cX - self.image_width // 2
             raw_correction = self.pid(error)  # Changed from self.pid.update(error)
             # Normalize correction to be proportional to linear speed, ensuring it's within a suitable range for PID control
@@ -152,7 +187,7 @@ class ImageProcessor(Node):
             # twist_msg.angular.z = 0.0
 
             print('linear.x:', twist_msg.linear.x, ' angular z:',  correction)
-            self.cmd_vel_publisher_.publish(twist_msg)
+            # self.cmd_vel_publisher_.publish(twist_msg)
 
             self.get_logger().info(f"Centroid: ({cX}, {cY}), Error: {error}, raw_correction: {raw_correction}, Correction: {correction}")
             return correction, error, cX, cY
