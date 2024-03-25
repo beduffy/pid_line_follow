@@ -78,6 +78,7 @@ class ImageProcessor(Node):
             if contours:
                 best_score = float('inf')
                 chosen_contour = None  # Initialize with None to handle case where no contour meets criteria
+                chosen_black = None
                 for contour in contours:
                     if len(contour) >= min_contour_points:  # Check if contour has enough points
                         rect = cv2.minAreaRect(contour)  # Get the minimum area rectangle for the contour
@@ -88,22 +89,34 @@ class ImageProcessor(Node):
                         aspect_ratio = width / height if width > height else height / width
                         
                         # Check if the contour is line-like by its aspect ratio
-                        if 2 < aspect_ratio < 10:  # Adjust the range as necessary
-                            M = cv2.moments(contour)
-                            if M["m00"] != 0:
-                                cX = int(M["m10"] / M["m00"])
-                                cY = int(M["m01"] / M["m00"])
-                                distance = abs(cX - center_x)
-                                # Prioritize contours closer to the bottom of the image (higher y value means lower on the image)
-                                y_priority = (h - cY) / h
-                                # Combine distance, y_priority, and aspect ratio into a single score for comparison
-                                # Adjust weighting as necessary. Here, we give more weight to the y position to prioritize lower contours
-                                score = distance + (y_priority * 100) - (aspect_ratio * 10)  # Subtract aspect ratio to prioritize line-like contours
-                                if score < best_score:
-                                    best_score = score
-                                    chosen_contour = contour
-                if chosen_contour is None and contours:  # Fallback to the first contour if none meet the criteria
-                    chosen_contour = contours[0]
+                        # if 2 < aspect_ratio < 10:  # Adjust the range as necessary
+                        M = cv2.moments(contour)
+                        if M["m00"] != 0:
+                            cX = int(M["m10"] / M["m00"])
+                            cY = int(M["m01"] / M["m00"])
+                            distance = abs(cX - center_x)
+                            # Prioritize contours closer to the bottom of the image (higher y value means lower on the image)
+                            y_priority = (h - cY) / h
+                            # Create a mask image that contains the contour filled in and dilate it to include nearby pixels
+                            mask = np.zeros(gray.shape, np.uint8)
+                            cv2.drawContours(mask, [contour], -1, 255, -1)
+                            kernel = np.ones((5,5),np.uint8)
+                            mask = cv2.dilate(mask, kernel, iterations=1)
+                            # Use the mask to calculate the mean color of the contour area in the original image
+                            mean_val = cv2.mean(gray, mask=mask)
+                            # Calculate black pixel proximity score (lower mean_val indicates more black pixels)
+                            # black_pixel_proximity = 255 - mean_val[0]
+                            black_pixel_proximity = mean_val[0]
+                            # Combine distance, y_priority, aspect_ratio, and black_pixel_proximity into a single score for comparison
+                            score = distance + (y_priority * 100) - (aspect_ratio * 10) + 100 * black_pixel_proximity  # Adjust weighting as necessary
+                            # print('black_pixel_proximity: ', black_pixel_proximity)
+                            # score = black_pixel_proximity  # Adjust weighting as necessary
+                            if score < best_score:
+                                best_score = score
+                                chosen_black = black_pixel_proximity
+                                chosen_contour = contour
+                # if chosen_contour is None and contours:  # Fallback to the first contour if none meet the criteria
+                #     chosen_contour = contours[0]
             else:
                 chosen_contour = None
 
@@ -154,7 +167,7 @@ class ImageProcessor(Node):
 
                 # Display the direction information on the image
                 direction_text = "Left" if direction < 0 else "Right"
-                cv2.putText(image_with_contours, f"Direction: {direction_text}, correction: {correction:.5f}, error: {error:.2f}", (10, 30), 
+                cv2.putText(image_with_contours, f"Direction: {direction_text}, correction: {correction:.5f}, error: {error:.2f}, black: {black_pixel_proximity}", (10, 30), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
 
             # Update the processed image message with the direction information
@@ -168,32 +181,25 @@ class ImageProcessor(Node):
     def use_chosen_contour_for_pid_set_point(self, chosen_contour):
         if chosen_contour is not None:
             y_positions = chosen_contour[:, :, 1].flatten()
-            highest_y_index = np.argmax(y_positions)
-            highest_y_point = chosen_contour[highest_y_index][0]
-            cX, cY = highest_y_point[0], highest_y_point[1]
+            sorted_indices = np.argsort(y_positions)
+            one_third_index = sorted_indices[len(sorted_indices) // 3]
+            one_third_point = chosen_contour[one_third_index][0]
+            cX, cY = one_third_point[0], one_third_point[1]
             error = cX - self.image_width // 2
-            raw_correction = self.pid(error)  # Changed from self.pid.update(error)
+            raw_correction = self.pid(error)
             # Normalize correction to be proportional to linear speed, ensuring it's within a suitable range for PID control
             # correction = np.tanh(raw_correction) * 0.05
-            # correction = np.tanh(raw_correction) * 0.01
             correction = raw_correction * 0.02
             
-            # correction = 0.0
             twist_msg = Twist()
             twist_msg.linear.x = self.linear_speed
             twist_msg.angular.z = correction  # Scale down to ensure it's not too high
-            # twist_msg.angular.z = correction * 0.5  # Scale down to ensure it's not too high
-            # twist_msg.linear.x = 0.0
-            # twist_msg.angular.z = 0.0
 
             print('linear.x:', twist_msg.linear.x, ' angular z:',  correction)
             # self.cmd_vel_publisher_.publish(twist_msg)
 
             self.get_logger().info(f"Centroid: ({cX}, {cY}), Error: {error}, raw_correction: {raw_correction}, Correction: {correction}")
             return correction, error, cX, cY
-            # else:
-            #     self.get_logger().warn("Chosen contour has zero area, skipping PID control.")
-            #     return None, None, None, None
         else:
             self.get_logger().warn("No contour chosen, skipping PID control.")
             return None, None, None, None
