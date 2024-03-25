@@ -6,6 +6,7 @@ from cv_bridge import CvBridge
 import cv2
 import numpy as np
 from simple_pid import PID
+from shapely.geometry import Polygon
 
 def is_contour_in_bottom_half(contour, image_height):
     """
@@ -77,87 +78,31 @@ class ImageProcessor(Node):
             min_contour_points = 50  # Minimum number of points for a contour to be considered
             min_contour_points = 5  # Minimum number of points for a contour to be considered
             if contours:
-                best_score = float('inf')
                 chosen_contour_pair = None  # Initialize with None to handle case where no contour meets criteria
-                parallel_contours = []  # Store pairs of parallel contours
+                max_intersection = 0  # Initialize maximum intersection area
                 for i, contour1 in enumerate(contours):
                     if len(contour1) < min_contour_points:
-                        print('continuing', len(contour1))
                         continue
                     for j, contour2 in enumerate(contours[i+1:], start=i+1):  # Avoid comparing the same contours
                         if len(contour2) < min_contour_points:
-                            print('continuing, contour points', len(contour2))
                             continue
                         # Calculate the bounding rotated rectangles for each contour
                         rect1 = cv2.minAreaRect(contour1)
                         box1 = cv2.boxPoints(rect1)
                         box1 = np.int0(box1)
-
                         rect2 = cv2.minAreaRect(contour2)
-                        # Calculate the angle of each rectangle
-                        angle1 = rect1[-1]
-                        angle2 = rect2[-1]
-                        # Normalize angles to the range [0, 180)
-                        if angle1 < -45:
-                            angle1 = 90 + angle1
-                        if angle2 < -45:
-                            angle2 = 90 + angle2
-                        angle1 = abs(angle1)
-                        angle2 = abs(angle2)
-                        # Calculate the angle difference
-                        angle_diff = abs(angle1 - angle2)
-                        # Display angle difference on the image near the contour for debugging
                         box2 = cv2.boxPoints(rect2)
                         box2 = np.int0(box2)
-                        cv2.drawContours(image_with_contours, [box1], 0, (0, 255, 0), 2)
-                        cv2.drawContours(image_with_contours, [box2], 0, (0, 0, 255), 2)
-                        # Calculate the center of the second rectangle to place the text
-                        M2 = cv2.moments(contour2)
-                        if M2["m00"] != 0:
-                            cX2 = int(M2["m10"] / M2["m00"])
-                            cY2 = int(M2["m01"] / M2["m00"])
-                            cv2.putText(image_with_contours, f"Diff: {angle_diff:.2f}", (cX2, cY2), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-                        # Check if the contours are roughly parallel by comparing their angles
-                        if angle_diff < 10 or angle_diff > 350:  # Allowing a small angle difference
-                            # Calculate the center points of each contour
-                            M1 = cv2.moments(contour1)
-                            M2 = cv2.moments(contour2)
-                            # print(M1, M2)
-                            if M1["m00"] != 0 and M2["m00"] != 0:
-                                cX1 = int(M1["m10"] / M1["m00"])
-                                cY1 = int(M1["m01"] / M1["m00"])
-                                cX2 = int(M2["m10"] / M2["m00"])
-                                cY2 = int(M2["m01"] / M2["m00"])
-                                # Calculate the distance between the center points of the contours
-                                center_distance = np.sqrt((cX2 - cX1)**2 + (cY2 - cY1)**2)
-                                # print(f'Center distance between contours: {center_distance}')
-                                # Check if the distance is within a reasonable range to consider them as a pair
-                                if 1 < center_distance < 100:  # Adjust the range as necessary
-                                    print('appending, center distance: ', center_distance)
-                                    parallel_contours.append((contour1, contour2))
-                # Choose the best pair based on their proximity to the center and their combined area
-                best_score = float('inf')
-                chosen_contour_pair = None
-                for contour_pair in parallel_contours:
-                    contour1, contour2 = contour_pair
-                    M1 = cv2.moments(contour1)
-                    M2 = cv2.moments(contour2)
-                    cX1 = int(M1["m10"] / M1["m00"])
-                    cX2 = int(M2["m10"] / M2["m00"])
-                    # Calculate the average x position of the pair
-                    avg_cX = (cX1 + cX2) / 2
-                    distance = abs(avg_cX - center_x)
-                    # Calculate the combined area of the contours
-                    area1 = cv2.contourArea(contour1)
-                    area2 = cv2.contourArea(contour2)
-                    combined_area = area1 + area2
-                    # Score based on distance to center and combined area (prioritize closer and larger pairs)
-                    score = distance - combined_area
-                    if score < best_score:
-                        best_score = score
-                        chosen_contour_pair = contour_pair  # Update chosen_contour_pair to be the best pair
-            # chosen_contour = chosen_contour_pair  # Assign the chosen pair to chosen_contour for further processing
-            chosen_contour = chosen_contour_pair[0] if chosen_contour_pair else None  # Assign the chosen pair to chosen_contour for further processing
+                        # Convert boxes to polygons
+                        poly1 = Polygon(box1)
+                        poly2 = Polygon(box2)
+                        # Calculate intersection area
+                        intersection_area = poly1.intersection(poly2).area
+                        # Update chosen_contour_pair if the current pair has a larger intersection area
+                        if intersection_area > max_intersection:
+                            max_intersection = intersection_area
+                            chosen_contour_pair = (contour1, contour2)
+                chosen_contour = chosen_contour_pair[0] if chosen_contour_pair else None  # Assign the chosen pair to chosen_contour for further processing
 
             # # After finding contours
             # color_threshold = 150
