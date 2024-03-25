@@ -75,23 +75,23 @@ class ImageProcessor(Node):
 
             center_x = w // 2
             min_contour_points = 50  # Minimum number of points for a contour to be considered
+            min_contour_points = 5  # Minimum number of points for a contour to be considered
             if contours:
                 best_score = float('inf')
                 chosen_contour_pair = None  # Initialize with None to handle case where no contour meets criteria
                 parallel_contours = []  # Store pairs of parallel contours
                 for i, contour1 in enumerate(contours):
                     if len(contour1) < min_contour_points:
-                        print('continuing')
+                        print('continuing', len(contour1))
                         continue
                     for j, contour2 in enumerate(contours[i+1:], start=i+1):  # Avoid comparing the same contours
                         if len(contour2) < min_contour_points:
-                            print('continuing')
+                            print('continuing, contour points', len(contour2))
                             continue
                         # Calculate the bounding rotated rectangles for each contour
                         rect1 = cv2.minAreaRect(contour1)
                         box1 = cv2.boxPoints(rect1)
                         box1 = np.int0(box1)
-                        # cv2.drawContours(image_with_contours, [box1], 0, (0, 255, 0), 2)
 
                         rect2 = cv2.minAreaRect(contour2)
                         # Calculate the angle of each rectangle
@@ -109,7 +109,8 @@ class ImageProcessor(Node):
                         # Display angle difference on the image near the contour for debugging
                         box2 = cv2.boxPoints(rect2)
                         box2 = np.int0(box2)
-                        # cv2.drawContours(image_with_contours, [box2], 0, (0, 0, 255), 2)
+                        cv2.drawContours(image_with_contours, [box1], 0, (0, 255, 0), 2)
+                        cv2.drawContours(image_with_contours, [box2], 0, (0, 0, 255), 2)
                         # Calculate the center of the second rectangle to place the text
                         M2 = cv2.moments(contour2)
                         if M2["m00"] != 0:
@@ -136,6 +137,7 @@ class ImageProcessor(Node):
                                     parallel_contours.append((contour1, contour2))
                 # Choose the best pair based on their proximity to the center and their combined area
                 best_score = float('inf')
+                chosen_contour_pair = None
                 for contour_pair in parallel_contours:
                     contour1, contour2 = contour_pair
                     M1 = cv2.moments(contour1)
@@ -154,8 +156,8 @@ class ImageProcessor(Node):
                     if score < best_score:
                         best_score = score
                         chosen_contour_pair = contour_pair  # Update chosen_contour_pair to be the best pair
-            chosen_contour = chosen_contour_pair  # Assign the chosen pair to chosen_contour for further processing
-            chosen_contour = chosen_contour_pair[0]  # Assign the chosen pair to chosen_contour for further processing
+            # chosen_contour = chosen_contour_pair  # Assign the chosen pair to chosen_contour for further processing
+            chosen_contour = chosen_contour_pair[0] if chosen_contour_pair else None  # Assign the chosen pair to chosen_contour for further processing
 
             # # After finding contours
             # color_threshold = 150
