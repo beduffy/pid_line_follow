@@ -105,18 +105,35 @@ class ImageProcessor(Node):
                             # Use the mask to calculate the mean color of the contour area in the original image
                             mean_val = cv2.mean(gray, mask=mask)
                             # Calculate black pixel proximity score (lower mean_val indicates more black pixels)
-                            # black_pixel_proximity = 255 - mean_val[0]
                             black_pixel_proximity = mean_val[0]
                             # Combine distance, y_priority, aspect_ratio, and black_pixel_proximity into a single score for comparison
                             score = distance + (y_priority * 100) - (aspect_ratio * 10) + 100 * black_pixel_proximity  # Adjust weighting as necessary
-                            # print('black_pixel_proximity: ', black_pixel_proximity)
-                            # score = black_pixel_proximity  # Adjust weighting as necessary
+                            
+                            
+                            # To avoid text overlapping for contours that are close to each other, dynamically adjust text position
+                            text_offset_x = 10  # Offset for text to avoid overlap, adjust as needed
+                            text_offset_y = 25  # Offset for text to avoid overlap, adjust as needed
+                            unique_text_position = True
+                            while unique_text_position:
+                                for other_contour in contours:
+                                    M_other = cv2.moments(other_contour)
+                                    if M_other["m00"] != 0:
+                                        other_cX = int(M_other["m10"] / M_other["m00"])
+                                        other_cY = int(M_other["m01"] / M_other["m00"])
+                                        # Check if the current text position is too close to any other contour's text position
+                                        if abs(cX - other_cX) < text_offset_x and abs(cY - other_cY) < text_offset_y:
+                                            cX += text_offset_x  # Move text position to the right
+                                            cY += text_offset_y  # Move text position down
+                                            break  # Check again for overlaps
+                                else:
+                                    unique_text_position = False  # No overlaps found, exit loop
+                            # Add text to the image for visualization with adjusted position to minimize overlap
+                            cv2.putText(image_with_contours, f"Score: {score:.2f}, Black: {black_pixel_proximity:.2f}", (cX, cY), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
                             if score < best_score:
                                 best_score = score
                                 chosen_black = black_pixel_proximity
                                 chosen_contour = contour
-                # if chosen_contour is None and contours:  # Fallback to the first contour if none meet the criteria
-                #     chosen_contour = contours[0]
             else:
                 chosen_contour = None
 
