@@ -77,65 +77,85 @@ class ImageProcessor(Node):
             min_contour_points = 50  # Minimum number of points for a contour to be considered
             if contours:
                 best_score = float('inf')
-                chosen_contour = None  # Initialize with None to handle case where no contour meets criteria
-                chosen_black = None
-                for contour in contours:
-                    if len(contour) >= min_contour_points:  # Check if contour has enough points
-                        rect = cv2.minAreaRect(contour)  # Get the minimum area rectangle for the contour
-                        box = cv2.boxPoints(rect)  # Get the four points of the rectangle
-                        box = np.int0(box)  # Convert points to integers
-                        width = np.linalg.norm(box[0] - box[1])
-                        height = np.linalg.norm(box[1] - box[2])
-                        aspect_ratio = width / height if width > height else height / width
-                        
-                        # Check if the contour is line-like by its aspect ratio
-                        # if 2 < aspect_ratio < 10:  # Adjust the range as necessary
-                        M = cv2.moments(contour)
-                        if M["m00"] != 0:
-                            cX = int(M["m10"] / M["m00"])
-                            cY = int(M["m01"] / M["m00"])
-                            distance = abs(cX - center_x)
-                            # Prioritize contours closer to the bottom of the image (higher y value means lower on the image)
-                            y_priority = (h - cY) / h
-                            # Create a mask image that contains the contour filled in and dilate it to include nearby pixels
-                            mask = np.zeros(gray.shape, np.uint8)
-                            cv2.drawContours(mask, [contour], -1, 255, -1)
-                            kernel = np.ones((5,5),np.uint8)
-                            mask = cv2.dilate(mask, kernel, iterations=1)
-                            # Use the mask to calculate the mean color of the contour area in the original image
-                            mean_val = cv2.mean(gray, mask=mask)
-                            # Calculate black pixel proximity score (lower mean_val indicates more black pixels)
-                            black_pixel_proximity = mean_val[0]
-                            # Combine distance, y_priority, aspect_ratio, and black_pixel_proximity into a single score for comparison
-                            score = distance + (y_priority * 100) - (aspect_ratio * 10) + 100 * black_pixel_proximity  # Adjust weighting as necessary
-                            
-                            
-                            # To avoid text overlapping for contours that are close to each other, dynamically adjust text position
-                            text_offset_x = 10  # Offset for text to avoid overlap, adjust as needed
-                            text_offset_y = 25  # Offset for text to avoid overlap, adjust as needed
-                            unique_text_position = True
-                            while unique_text_position:
-                                for other_contour in contours:
-                                    M_other = cv2.moments(other_contour)
-                                    if M_other["m00"] != 0:
-                                        other_cX = int(M_other["m10"] / M_other["m00"])
-                                        other_cY = int(M_other["m01"] / M_other["m00"])
-                                        # Check if the current text position is too close to any other contour's text position
-                                        if abs(cX - other_cX) < text_offset_x and abs(cY - other_cY) < text_offset_y:
-                                            cX += text_offset_x  # Move text position to the right
-                                            cY += text_offset_y  # Move text position down
-                                            break  # Check again for overlaps
-                                else:
-                                    unique_text_position = False  # No overlaps found, exit loop
-                            # Add text to the image for visualization with adjusted position to minimize overlap
-                            cv2.putText(image_with_contours, f"Score: {score:.2f}, Black: {black_pixel_proximity:.2f}", (cX, cY), 
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
-                            if score < best_score:
-                                best_score = score
-                                chosen_black = black_pixel_proximity
-                                chosen_contour = contour
-            else:
-                chosen_contour = None
+                chosen_contour_pair = None  # Initialize with None to handle case where no contour meets criteria
+                parallel_contours = []  # Store pairs of parallel contours
+                for i, contour1 in enumerate(contours):
+                    if len(contour1) < min_contour_points:
+                        print('continuing')
+                        continue
+                    for j, contour2 in enumerate(contours[i+1:], start=i+1):  # Avoid comparing the same contours
+                        if len(contour2) < min_contour_points:
+                            print('continuing')
+                            continue
+                        # Calculate the bounding rotated rectangles for each contour
+                        rect1 = cv2.minAreaRect(contour1)
+                        box1 = cv2.boxPoints(rect1)
+                        box1 = np.int0(box1)
+                        # cv2.drawContours(image_with_contours, [box1], 0, (0, 255, 0), 2)
+
+                        rect2 = cv2.minAreaRect(contour2)
+                        # Calculate the angle of each rectangle
+                        angle1 = rect1[-1]
+                        angle2 = rect2[-1]
+                        # Normalize angles to the range [0, 180)
+                        if angle1 < -45:
+                            angle1 = 90 + angle1
+                        if angle2 < -45:
+                            angle2 = 90 + angle2
+                        angle1 = abs(angle1)
+                        angle2 = abs(angle2)
+                        # Calculate the angle difference
+                        angle_diff = abs(angle1 - angle2)
+                        # Display angle difference on the image near the contour for debugging
+                        box2 = cv2.boxPoints(rect2)
+                        box2 = np.int0(box2)
+                        # cv2.drawContours(image_with_contours, [box2], 0, (0, 0, 255), 2)
+                        # Calculate the center of the second rectangle to place the text
+                        M2 = cv2.moments(contour2)
+                        if M2["m00"] != 0:
+                            cX2 = int(M2["m10"] / M2["m00"])
+                            cY2 = int(M2["m01"] / M2["m00"])
+                            cv2.putText(image_with_contours, f"Diff: {angle_diff:.2f}", (cX2, cY2), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                        # Check if the contours are roughly parallel by comparing their angles
+                        if angle_diff < 10 or angle_diff > 350:  # Allowing a small angle difference
+                            # Calculate the center points of each contour
+                            M1 = cv2.moments(contour1)
+                            M2 = cv2.moments(contour2)
+                            # print(M1, M2)
+                            if M1["m00"] != 0 and M2["m00"] != 0:
+                                cX1 = int(M1["m10"] / M1["m00"])
+                                cY1 = int(M1["m01"] / M1["m00"])
+                                cX2 = int(M2["m10"] / M2["m00"])
+                                cY2 = int(M2["m01"] / M2["m00"])
+                                # Calculate the distance between the center points of the contours
+                                center_distance = np.sqrt((cX2 - cX1)**2 + (cY2 - cY1)**2)
+                                # print(f'Center distance between contours: {center_distance}')
+                                # Check if the distance is within a reasonable range to consider them as a pair
+                                if 1 < center_distance < 100:  # Adjust the range as necessary
+                                    print('appending, center distance: ', center_distance)
+                                    parallel_contours.append((contour1, contour2))
+                # Choose the best pair based on their proximity to the center and their combined area
+                best_score = float('inf')
+                for contour_pair in parallel_contours:
+                    contour1, contour2 = contour_pair
+                    M1 = cv2.moments(contour1)
+                    M2 = cv2.moments(contour2)
+                    cX1 = int(M1["m10"] / M1["m00"])
+                    cX2 = int(M2["m10"] / M2["m00"])
+                    # Calculate the average x position of the pair
+                    avg_cX = (cX1 + cX2) / 2
+                    distance = abs(avg_cX - center_x)
+                    # Calculate the combined area of the contours
+                    area1 = cv2.contourArea(contour1)
+                    area2 = cv2.contourArea(contour2)
+                    combined_area = area1 + area2
+                    # Score based on distance to center and combined area (prioritize closer and larger pairs)
+                    score = distance - combined_area
+                    if score < best_score:
+                        best_score = score
+                        chosen_contour_pair = contour_pair  # Update chosen_contour_pair to be the best pair
+            chosen_contour = chosen_contour_pair  # Assign the chosen pair to chosen_contour for further processing
+            chosen_contour = chosen_contour_pair[0]  # Assign the chosen pair to chosen_contour for further processing
 
             # # After finding contours
             # color_threshold = 150
@@ -184,7 +204,7 @@ class ImageProcessor(Node):
 
                 # Display the direction information on the image
                 direction_text = "Left" if direction < 0 else "Right"
-                cv2.putText(image_with_contours, f"Direction: {direction_text}, correction: {correction:.5f}, error: {error:.2f}, black: {black_pixel_proximity}", (10, 30), 
+                cv2.putText(image_with_contours, f"Direction: {direction_text}, correction: {correction:.5f}, error: {error:.2f}", (10, 30), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
 
             # Update the processed image message with the direction information
@@ -192,8 +212,10 @@ class ImageProcessor(Node):
             self.publisher_.publish(processed_image_msg)
 
         except Exception as e:
-            self.get_logger().error(f'Failed to process and publish image: {e}. Exception occurred at line: {e.__traceback__.tb_lineno}')
-    
+            import traceback
+            tb_str = traceback.format_exception(etype=type(e), value=e, tb=e.__traceback__)
+            error_message = ''.join(tb_str)
+            self.get_logger().error(f'Failed to process and publish image. Full error: {error_message}')
     
     def use_chosen_contour_for_pid_set_point(self, chosen_contour):
         if chosen_contour is not None:
