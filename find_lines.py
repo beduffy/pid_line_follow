@@ -109,28 +109,27 @@ for image_file in image_files:
     # Create a window for the trackbars
     cv2.namedWindow('myTracker')
 
+    cv2.createTrackbar('Hue Low', 'myTracker', hueLow, 179, onTrack1)
+    cv2.createTrackbar('Hue High', 'myTracker', hueHigh, 179, onTrack2)
+    cv2.createTrackbar('Sat Low', 'myTracker', satLow, 255, onTrack3)
+    cv2.createTrackbar('Sat High', 'myTracker', satHigh, 255, onTrack4)
+    cv2.createTrackbar('Val Low', 'myTracker', valLow, 255, onTrack5)
+    cv2.createTrackbar('Val High', 'myTracker', valHigh, 255, onTrack6)
+
+    cv2.imshow('image', image)
+
     while True:
-
-        
-
-        cv2.createTrackbar('Hue Low', 'myTracker', hueLow, 179, onTrack1)
-        cv2.createTrackbar('Hue High', 'myTracker', hueHigh, 179, onTrack2)
-        cv2.createTrackbar('Sat Low', 'myTracker', satLow, 255, onTrack3)
-        cv2.createTrackbar('Sat High', 'myTracker', satHigh, 255, onTrack4)
-        cv2.createTrackbar('Val Low', 'myTracker', valLow, 255, onTrack5)
-        cv2.createTrackbar('Val High', 'myTracker', valHigh, 255, onTrack6)
-
         # Get the current positions of the trackbars
-        lower_h = cv2.getTrackbarPos('Lower H', 'Yellow Color Tuning')
-        lower_s = cv2.getTrackbarPos('Lower S', 'Yellow Color Tuning')
-        lower_v = cv2.getTrackbarPos('Lower V', 'Yellow Color Tuning')
-        upper_h = cv2.getTrackbarPos('Upper H', 'Yellow Color Tuning')
-        upper_s = cv2.getTrackbarPos('Upper S', 'Yellow Color Tuning')
-        upper_v = cv2.getTrackbarPos('Upper V', 'Yellow Color Tuning')
+        hueLow = cv2.getTrackbarPos('Hue Low', 'myTracker')
+        hueHigh = cv2.getTrackbarPos('Hue High', 'myTracker')
+        satLow = cv2.getTrackbarPos('Sat Low', 'myTracker')
+        satHigh = cv2.getTrackbarPos('Sat High', 'myTracker')
+        valLow = cv2.getTrackbarPos('Val Low', 'myTracker')
+        valHigh = cv2.getTrackbarPos('Val High', 'myTracker')
 
         # Define range for yellow color in HSV using trackbar values
-        lower_yellow = np.array([lower_h, lower_s, lower_v])
-        upper_yellow = np.array([upper_h, upper_s, upper_v])
+        lower_yellow = np.array([hueLow, satLow, valLow])
+        upper_yellow = np.array([hueHigh, satHigh, valHigh])
 
         # Create a mask for yellow color
         yellow_mask = cv2.inRange(hsv_image, lower_yellow, upper_yellow)
