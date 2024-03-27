@@ -48,6 +48,9 @@ class ImageProcessor(Node):
         # self.linear_speed = 0.0
         self.linear_speed = 0.001
 
+
+        self.linear_speed = 0.1
+
     def listener_callback(self, data):
         try:
 
@@ -69,16 +72,23 @@ class ImageProcessor(Node):
             image_with_contours = image.copy()
 
             center_x = w // 2
-            min_contour_points = 50  # Minimum number of points for a contour to be considered
+            image_third_height = h * 2 // 3  # Calculate the height which divides the image into bottom two thirds
             min_contour_points = 5  # Minimum number of points for a contour to be considered
+            chosen_contour = None
             if contours:
                 chosen_contour_pair = None  # Initialize with None to handle case where no contour meets criteria
                 max_intersection = 0  # Initialize maximum intersection area
                 for i, contour1 in enumerate(contours):
-                    if len(contour1) < min_contour_points:
+                    # Calculate the y-coordinates of the contour to check if most points are in the bottom two thirds
+                    _, y1, _, height1 = cv2.boundingRect(contour1)
+                    contour1_bottom_thirds_points = sum(y1 + point[0][1] > image_third_height for point in contour1)
+                    if len(contour1) < min_contour_points or contour1_bottom_thirds_points/len(contour1) < 0.5:
                         continue
-                    for j, contour2 in enumerate(contours[i+1:], start=i+1):  # Avoid comparing the same contours
-                        if len(contour2) < min_contour_points:
+                    for j, contour2 in enumerate(contours[i+1:], start=i+1):
+                        # Calculate the y-coordinates of the contour to check if most points are in the bottom two thirds
+                        _, y2, _, height2 = cv2.boundingRect(contour2)
+                        contour2_bottom_thirds_points = sum(y2 + point[0][1] > image_third_height for point in contour2)
+                        if len(contour2) < min_contour_points or contour2_bottom_thirds_points/len(contour2) < 0.5:
                             continue
                         # Calculate the bounding rotated rectangles for each contour
                         rect1 = cv2.minAreaRect(contour1)
