@@ -35,6 +35,7 @@ import glob
 
 # Define the path to the folder containing the images
 image_folder_path = 'data/march_27/'
+image_folder_path = 'data/march_27_tuned_gucv'
 # Use glob to find all jpg files in the folder
 image_files = glob.glob(os.path.join(image_folder_path, '*.jpg'))
 
@@ -117,27 +118,35 @@ for image_file in image_files:
     cv2.createTrackbar('Val High', 'myTracker', valHigh, 255, onTrack6)
 
     cv2.imshow('image', image)
+    lower_yellow = np.array([hueLow, satLow, valLow])
+    upper_yellow = np.array([hueHigh, satHigh, valHigh])
 
-    while True:
-        # Get the current positions of the trackbars
-        hueLow = cv2.getTrackbarPos('Hue Low', 'myTracker')
-        hueHigh = cv2.getTrackbarPos('Hue High', 'myTracker')
-        satLow = cv2.getTrackbarPos('Sat Low', 'myTracker')
-        satHigh = cv2.getTrackbarPos('Sat High', 'myTracker')
-        valLow = cv2.getTrackbarPos('Val Low', 'myTracker')
-        valHigh = cv2.getTrackbarPos('Val High', 'myTracker')
+    def tune_hsv_values_with_trackbar_in_loop():
+        while True:
+            # Get the current positions of the trackbars
+            hueLow = cv2.getTrackbarPos('Hue Low', 'myTracker')
+            hueHigh = cv2.getTrackbarPos('Hue High', 'myTracker')
+            satLow = cv2.getTrackbarPos('Sat Low', 'myTracker')
+            satHigh = cv2.getTrackbarPos('Sat High', 'myTracker')
+            valLow = cv2.getTrackbarPos('Val Low', 'myTracker')
+            valHigh = cv2.getTrackbarPos('Val High', 'myTracker')
 
-        # Define range for yellow color in HSV using trackbar values
-        lower_yellow = np.array([hueLow, satLow, valLow])
-        upper_yellow = np.array([hueHigh, satHigh, valHigh])
+            # Define range for yellow color in HSV using trackbar values
+            lower_yellow = np.array([hueLow, satLow, valLow])
+            upper_yellow = np.array([hueHigh, satHigh, valHigh])
 
-        # Create a mask for yellow color
-        yellow_mask = cv2.inRange(hsv_image, lower_yellow, upper_yellow)
+            # Create a mask for yellow color
+            yellow_mask = cv2.inRange(hsv_image, lower_yellow, upper_yellow)
 
-        # Display the yellow mask
-        cv2.imshow('Yellow Mask', yellow_mask)
-        if cv2.waitKey(1) & 0xff == ord('q'):
-            break
+            # Display the yellow mask
+            cv2.imshow('Yellow Mask', yellow_mask)
+            if cv2.waitKey(1) & 0xff == ord('q'):
+                break
+
+    
+    tune_hsv_values_with_trackbar_in_loop()
+
+    # yellow_mask = cv2.inRange(hsv_image, lower_yellow, upper_yellow)
 
     if contours:
         for contour in contours:
