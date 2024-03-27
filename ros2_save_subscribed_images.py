@@ -16,6 +16,7 @@ class ImageSaver(Node):
             10)
         self.bridge = CvBridge()
         self.image_folder = 'data/march_27'
+        self.image_folder = 'data/march_27_tuned_gucv'
         os.makedirs(self.image_folder, exist_ok=True)
         self.last_saved_time = None
         self.save_interval = 1.0 / 5  # 5 fps, so 1/5th of a second between saves
