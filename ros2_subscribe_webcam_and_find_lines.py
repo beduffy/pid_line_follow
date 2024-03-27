@@ -50,6 +50,8 @@ class ImageProcessor(Node):
 
 
         self.linear_speed = 0.1
+        self.linear_speed = 0.25
+        self.linear_speed = 0.4
 
     def listener_callback(self, data):
         try:
@@ -71,52 +73,67 @@ class ImageProcessor(Node):
             contours, hierarchy = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             image_with_contours = image.copy()
 
+            # old values for non tuned gucv
+            # hueLow = 0
+            # hueHigh = 179
+            # satLow = 27
+            # satHigh = 255
+            # valLow = 200
+            # valHigh = 226
+
+            hueLow = 13
+            hueHigh = 175
+            satLow = 17
+            satHigh = 196
+            valLow = 130
+            valHigh = 226
+
+            hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            lower_yellow = np.array([hueLow, satLow, valLow])
+            upper_yellow = np.array([hueHigh, satHigh, valHigh])
             center_x = w // 2
-            image_third_height = h * 2 // 3  # Calculate the height which divides the image into bottom two thirds
+            image_third_height = h * 2 // 3
             min_contour_points = 5  # Minimum number of points for a contour to be considered
             chosen_contour = None
-            if contours:
-                chosen_contour_pair = None  # Initialize with None to handle case where no contour meets criteria
-                max_intersection = 0  # Initialize maximum intersection area
-                for i, contour1 in enumerate(contours):
-                    # Calculate the y-coordinates of the contour to check if most points are in the bottom two thirds
-                    _, y1, _, height1 = cv2.boundingRect(contour1)
-                    contour1_bottom_thirds_points = sum(y1 + point[0][1] > image_third_height for point in contour1)
-                    if len(contour1) < min_contour_points or contour1_bottom_thirds_points/len(contour1) < 0.5:
-                        continue
-                    for j, contour2 in enumerate(contours[i+1:], start=i+1):
-                        # Calculate the y-coordinates of the contour to check if most points are in the bottom two thirds
-                        _, y2, _, height2 = cv2.boundingRect(contour2)
-                        contour2_bottom_thirds_points = sum(y2 + point[0][1] > image_third_height for point in contour2)
-                        if len(contour2) < min_contour_points or contour2_bottom_thirds_points/len(contour2) < 0.5:
-                            continue
-                        # Calculate the bounding rotated rectangles for each contour
-                        rect1 = cv2.minAreaRect(contour1)
-                        box1 = cv2.boxPoints(rect1)
-                        box1 = np.int0(box1)
-                        rect2 = cv2.minAreaRect(contour2)
-                        box2 = cv2.boxPoints(rect2)
-                        box2 = np.int0(box2)
-                        # Convert boxes to polygons
-                        poly1 = Polygon(box1)
-                        poly2 = Polygon(box2)
-                        # Calculate intersection area
-                        intersection_area = poly1.intersection(poly2).area
-                        # Update chosen_contour_pair if the current pair has a larger intersection area
-                        if intersection_area > max_intersection:
-                            max_intersection = intersection_area
-                            chosen_contour_pair = (contour1, contour2)
-                chosen_contour = chosen_contour_pair[0] if chosen_contour_pair else None  # Assign the chosen pair to chosen_contour for further processing
+            max_yellow_nearby = 0  # Initialize maximum yellow nearby count
+            yellow_mask = cv2.inRange(hsv_image, lower_yellow, upper_yellow)
 
+            if contours:
+                for contour in contours:
+                    # Calculate the y-coordinates of the contour to check if most points are in the bottom two thirds
+                    _, y, _, height = cv2.boundingRect(contour)
+                    if y + height < image_third_height or len(contour) < min_contour_points:
+                        continue
+                    # Create a mask from the current contour
+                    contour_mask = np.zeros_like(gray)
+                    cv2.drawContours(contour_mask, [contour], -1, 255, -1)
+                    # Calculate the amount of yellow within the contour
+                    yellow_within_contour = cv2.bitwise_and(yellow_mask, yellow_mask, mask=contour_mask)
+                    yellow_count = cv2.countNonZero(yellow_within_contour)
+                    # Update chosen_contour if the current contour has more yellow nearby
+                    if yellow_count > max_yellow_nearby:
+                        max_yellow_nearby = yellow_count
+                        chosen_contour = contour
+            if chosen_contour is not None:
+                cv2.drawContours(image_with_contours, [chosen_contour], -1, (0, 255, 0), 3)
+                y_positions = chosen_contour[:, :, 1].flatten()
+                lowest_y = np.min(y_positions)
+                highest_y = np.max(y_positions)
+                print(f"Lowest Y: {lowest_y}, Highest Y: {highest_y}")
             for contour in contours:
-                if np.array_equal(contour, chosen_contour):
-                    cv2.drawContours(image_with_contours, [contour], -1, (0, 255, 0), 3)
-                    y_positions = contour[:, :, 1].flatten()
-                    lowest_y = np.min(y_positions)
-                    highest_y = np.max(y_positions)
-                    print(f"Lowest Y: {lowest_y}, Highest Y: {highest_y}")
-                else:
+                if not np.array_equal(contour, chosen_contour):
                     cv2.drawContours(image_with_contours, [contour], -1, (0, 0, 255), 3)
+
+
+            # for contour in contours:
+            #     if np.array_equal(contour, chosen_contour):
+            #         cv2.drawContours(image_with_contours, [contour], -1, (0, 255, 0), 3)
+            #         y_positions = contour[:, :, 1].flatten()
+            #         lowest_y = np.min(y_positions)
+            #         highest_y = np.max(y_positions)
+            #         print(f"Lowest Y: {lowest_y}, Highest Y: {highest_y}")
+            #     else:
+            #         cv2.drawContours(image_with_contours, [contour], -1, (0, 0, 255), 3)
 
             # Use the chosen contour to calculate PID and publish cmd_vel
             correction, error, cX, cY = self.use_chosen_contour_for_pid_set_point(chosen_contour)
@@ -161,8 +178,11 @@ class ImageProcessor(Node):
             raw_correction = self.pid(error)
             # Normalize correction to be proportional to linear speed, ensuring it's within a suitable range for PID control
             # correction = np.tanh(raw_correction) * 0.05
-            correction = raw_correction * 0.02
+            # correction = raw_correction * 0.1  # worked well for 0.1m/s
+            correction = raw_correction * 0.4  # worked well for 0.25
+            correction = raw_correction * 0.8  # worked well for 0.4
             
+            # TODO to go 0.54m/s I nened to turn off safety override
             twist_msg = Twist()
             twist_msg.linear.x = self.linear_speed
             twist_msg.angular.z = correction  # Scale down to ensure it's not too high
