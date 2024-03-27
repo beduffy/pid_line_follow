@@ -30,94 +30,165 @@ def use_chosen_contour_for_pid_set_point(chosen_contour):
         print("No contour chosen, skipping PID control.")
         return None, None, None, None
 
+import os
+import glob
 
-# image = self.bridge.compressed_imgmsg_to_cv2(data, desired_encoding='passthrough')
-# image = cv2.imread('data/march_27/2024-03-27-16-30-59-800.jpg')
-image = cv2.imread('data/march_27/2024-03-27-19-17-59-602318.jpg')
-print(image.shape)
-gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-h, w = gray.shape
-image_width = w  # Set the image width for PID calculations
+# Define the path to the folder containing the images
+image_folder_path = 'data/march_27/'
+# Use glob to find all jpg files in the folder
+image_files = glob.glob(os.path.join(image_folder_path, '*.jpg'))
 
-# blurred_gray = cv2.GaussianBlur(gray, (5, 5), 0)
-blurred_gray = cv2.GaussianBlur(gray, (7, 7), 0)
-# blurred_gray = gray
-edges = cv2.Canny(blurred_gray, 30, 100, apertureSize=3)
-edges = cv2.dilate(edges, None, iterations=1)
+for image_file in image_files:
+    image = cv2.imread(image_file)
+    print(image.shape)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    h, w = gray.shape
+    image_width = w  # Set the image width for PID calculations
 
-contours, hierarchy = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-image_with_contours = image.copy()
+    blurred_gray = cv2.GaussianBlur(gray, (7, 7), 0)
+    edges = cv2.Canny(blurred_gray, 30, 100, apertureSize=3)
+    edges = cv2.dilate(edges, None, iterations=1)
 
-center_x = w // 2
-image_third_height = h * 2 // 3  # Calculate the height which divides the image into bottom two thirds
-min_contour_points = 5  # Minimum number of points for a contour to be considered
-chosen_contour = None
-if contours:
-    chosen_contour_pair = None  # Initialize with None to handle case where no contour meets criteria
-    max_intersection = 0  # Initialize maximum intersection area
-    for i, contour1 in enumerate(contours):
-        # Calculate the y-coordinates of the contour to check if most points are in the bottom two thirds
-        _, y1, _, height1 = cv2.boundingRect(contour1)
-        contour1_bottom_thirds_points = sum(y1 + point[0][1] > image_third_height for point in contour1)
-        if len(contour1) < min_contour_points or contour1_bottom_thirds_points/len(contour1) < 0.5:
-            continue
-        for j, contour2 in enumerate(contours[i+1:], start=i+1):
+    contours, hierarchy = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    image_with_contours = image.copy()
+
+    center_x = w // 2
+    image_third_height = h * 2 // 3  # Calculate the height which divides the image into bottom two thirds
+    min_contour_points = 5  # Minimum number of points for a contour to be considered
+    chosen_contour = None
+    max_yellow_nearby = 0  # Initialize maximum yellow nearby count
+
+    def nothing(x):
+        pass
+
+    def onTrack1(val):
+        global hueLow
+        hueLow = val
+        print('Hue Low', hueLow)
+
+
+    def onTrack2(val):
+        global hueHigh
+        hueHigh = val
+        print('Hue High', hueHigh)
+
+
+    def onTrack3(val):
+        global satLow
+        satLow = val
+        print('Sat Low', satLow)
+
+
+    def onTrack4(val):
+        global satHigh
+        satHigh = val
+        print('Sat High', satHigh)
+
+
+    def onTrack5(val):
+        global valLow
+        valLow = val
+        print('Val Low', valLow)
+
+
+    def onTrack6(val):
+        global valHigh
+        valHigh = val
+        print('Val High', valHigh)
+
+    hueLow = 0
+    hueHigh = 179
+    satLow = 27
+    satHigh = 255
+    valLow = 200
+    valHigh = 226
+
+    # Convert image to HSV color space to better identify yellow color
+    hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+    # Create a window for the trackbars
+    cv2.namedWindow('myTracker')
+
+    while True:
+
+        
+
+        cv2.createTrackbar('Hue Low', 'myTracker', hueLow, 179, onTrack1)
+        cv2.createTrackbar('Hue High', 'myTracker', hueHigh, 179, onTrack2)
+        cv2.createTrackbar('Sat Low', 'myTracker', satLow, 255, onTrack3)
+        cv2.createTrackbar('Sat High', 'myTracker', satHigh, 255, onTrack4)
+        cv2.createTrackbar('Val Low', 'myTracker', valLow, 255, onTrack5)
+        cv2.createTrackbar('Val High', 'myTracker', valHigh, 255, onTrack6)
+
+        # Get the current positions of the trackbars
+        lower_h = cv2.getTrackbarPos('Lower H', 'Yellow Color Tuning')
+        lower_s = cv2.getTrackbarPos('Lower S', 'Yellow Color Tuning')
+        lower_v = cv2.getTrackbarPos('Lower V', 'Yellow Color Tuning')
+        upper_h = cv2.getTrackbarPos('Upper H', 'Yellow Color Tuning')
+        upper_s = cv2.getTrackbarPos('Upper S', 'Yellow Color Tuning')
+        upper_v = cv2.getTrackbarPos('Upper V', 'Yellow Color Tuning')
+
+        # Define range for yellow color in HSV using trackbar values
+        lower_yellow = np.array([lower_h, lower_s, lower_v])
+        upper_yellow = np.array([upper_h, upper_s, upper_v])
+
+        # Create a mask for yellow color
+        yellow_mask = cv2.inRange(hsv_image, lower_yellow, upper_yellow)
+
+        # Display the yellow mask
+        cv2.imshow('Yellow Mask', yellow_mask)
+        if cv2.waitKey(1) & 0xff == ord('q'):
+            break
+
+    if contours:
+        for contour in contours:
             # Calculate the y-coordinates of the contour to check if most points are in the bottom two thirds
-            _, y2, _, height2 = cv2.boundingRect(contour2)
-            contour2_bottom_thirds_points = sum(y2 + point[0][1] > image_third_height for point in contour2)
-            if len(contour2) < min_contour_points or contour2_bottom_thirds_points/len(contour2) < 0.5:
+            _, y, _, height = cv2.boundingRect(contour)
+            if y + height < image_third_height or len(contour) < min_contour_points:
                 continue
-            # Calculate the bounding rotated rectangles for each contour
-            rect1 = cv2.minAreaRect(contour1)
-            box1 = cv2.boxPoints(rect1)
-            box1 = np.int0(box1)
-            rect2 = cv2.minAreaRect(contour2)
-            box2 = cv2.boxPoints(rect2)
-            box2 = np.int0(box2)
-            # Convert boxes to polygons
-            poly1 = Polygon(box1)
-            poly2 = Polygon(box2)
-            # Calculate intersection area
-            intersection_area = poly1.intersection(poly2).area
-            # Update chosen_contour_pair if the current pair has a larger intersection area
-            if intersection_area > max_intersection:
-                max_intersection = intersection_area
-                chosen_contour_pair = (contour1, contour2)
-    chosen_contour = chosen_contour_pair[0] if chosen_contour_pair else None  # Assign the chosen pair to chosen_contour for further processing
-
-for contour in contours:
-    if np.array_equal(contour, chosen_contour):
-        cv2.drawContours(image_with_contours, [contour], -1, (0, 255, 0), 3)
-        y_positions = contour[:, :, 1].flatten()
+            # Create a mask from the current contour
+            contour_mask = np.zeros_like(gray)
+            cv2.drawContours(contour_mask, [contour], -1, 255, -1)
+            # Calculate the amount of yellow within the contour
+            yellow_within_contour = cv2.bitwise_and(yellow_mask, yellow_mask, mask=contour_mask)
+            yellow_count = cv2.countNonZero(yellow_within_contour)
+            # Update chosen_contour if the current contour has more yellow nearby
+            if yellow_count > max_yellow_nearby:
+                max_yellow_nearby = yellow_count
+                chosen_contour = contour
+    if chosen_contour is not None:
+        cv2.drawContours(image_with_contours, [chosen_contour], -1, (0, 255, 0), 3)
+        y_positions = chosen_contour[:, :, 1].flatten()
         lowest_y = np.min(y_positions)
         highest_y = np.max(y_positions)
         print(f"Lowest Y: {lowest_y}, Highest Y: {highest_y}")
-    else:
-        cv2.drawContours(image_with_contours, [contour], -1, (0, 0, 255), 3)
+    for contour in contours:
+        if not np.array_equal(contour, chosen_contour):
+            cv2.drawContours(image_with_contours, [contour], -1, (0, 0, 255), 3)
 
-# Use the chosen contour to calculate PID and publish cmd_vel
-correction, error, cX, cY = use_chosen_contour_for_pid_set_point(chosen_contour)
+    # Use the chosen contour to calculate PID and publish cmd_vel
+    correction, error, cX, cY = use_chosen_contour_for_pid_set_point(chosen_contour)
 
-if chosen_contour is not None and correction is not None:
-    # Calculate the direction vector based on the correction
-    direction = -np.sign(correction)
-    arrow_length = 50
-    arrow_thickness = 2
-    arrow_color = (255, 0, 0)  # Red color for the direction arrow
+    if chosen_contour is not None and correction is not None:
+        # Calculate the direction vector based on the correction
+        direction = -np.sign(correction)
+        arrow_length = 50
+        arrow_thickness = 2
+        arrow_color = (255, 0, 0)  # Red color for the direction arrow
 
-    # Calculate start and end points for the arrow
-    start_point = (cX, cY)
-    end_point = (int(cX + direction * arrow_length), cY)
+        # Calculate start and end points for the arrow
+        start_point = (cX, cY)
+        end_point = (int(cX + direction * arrow_length), cY)
 
-    # Draw the direction arrow on the image
-    cv2.arrowedLine(image_with_contours, start_point, end_point, arrow_color, arrow_thickness)
+        # Draw the direction arrow on the image
+        cv2.arrowedLine(image_with_contours, start_point, end_point, arrow_color, arrow_thickness)
 
-    # Display the direction information on the image
-    direction_text = "Left" if direction < 0 else "Right"
-    cv2.putText(image_with_contours, f"Direction: {direction_text}, correction: {correction:.5f}, error: {error:.2f}", (10, 30), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
-    
-cv2.imshow('image_with_contours', image_with_contours)
-cv2.waitKey(0)
+        # Display the direction information on the image
+        direction_text = "Left" if direction < 0 else "Right"
+        cv2.putText(image_with_contours, f"Direction: {direction_text}, correction: {correction:.5f}, error: {error:.2f}", (10, 30), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
+        
+    cv2.imshow('image_with_contours', image_with_contours)
+    cv2.waitKey(0)
 cv2.destroyAllWindows()
 
