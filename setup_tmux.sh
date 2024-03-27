@@ -12,20 +12,16 @@ then
 
     tmux rename-window -t 0 'turtlebot-and-perception'
 
-    tmux send-keys 'python ros2_publish_webcam.py' C-m
+    tmux send-keys 'python3 ros2_publish_webcam.py' C-m
 
     tmux split-window -h
     tmux send-keys 'sleep 2' C-m
-    tmux send-keys 'python ros2_subscribe_webcam_and_find_lines.py' C-m
+    tmux send-keys 'python3 ros2_subscribe_webcam_and_find_lines.py' C-m
 
     tmux select-layout even-vertical
 fi
 
-# TODO overall 
-1. I just want to publish webcam image on ros2
-2. Visualise somewhere e.g. ros2, or ros2/1 bridge
-3. Then apply contour edge detection etc code and visualise this
-4. Then start building control algorithm. 
+#TODO running tmux ruins my ros setup and makes the code not work somehow. Need to get to the bottom of this. Ask gpt
 
 # if [ "$attach_session" == "y" ]; then
 #     # Attach Session, on the Main window
