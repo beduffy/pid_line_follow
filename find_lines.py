@@ -46,9 +46,13 @@ for image_file in image_files:
     h, w = gray.shape
     image_width = w  # Set the image width for PID calculations
 
-    blurred_gray = cv2.GaussianBlur(gray, (7, 7), 0)
+    # blurred_gray = cv2.GaussianBlur(gray, (7, 7), 0)
+    blurred_gray = cv2.GaussianBlur(gray, (3, 3), 0)
     edges = cv2.Canny(blurred_gray, 30, 100, apertureSize=3)
     edges = cv2.dilate(edges, None, iterations=1)
+    # Display the edge-detected image
+    cv2.imshow('Edges', edges)
+    # cv2.waitKey(1)  # Wait for a key press to proceed, with a small delay to allow imshow to work properly
 
     contours, hierarchy = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     image_with_contours = image.copy()
@@ -59,8 +63,6 @@ for image_file in image_files:
     chosen_contour = None
     max_yellow_nearby = 0  # Initialize maximum yellow nearby count
 
-    def nothing(x):
-        pass
 
     def onTrack1(val):
         global hueLow
@@ -97,11 +99,11 @@ for image_file in image_files:
         valHigh = val
         print('Val High', valHigh)
 
-    hueLow = 0
-    hueHigh = 179
-    satLow = 27
-    satHigh = 255
-    valLow = 200
+    hueLow = 13
+    hueHigh = 175
+    satLow = 17
+    satHigh = 196
+    valLow = 130
     valHigh = 226
 
     # Convert image to HSV color space to better identify yellow color
@@ -143,10 +145,9 @@ for image_file in image_files:
             if cv2.waitKey(1) & 0xff == ord('q'):
                 break
 
-    
+    # TODO could use yellow more rather than contour. Contour code is the problem
     tune_hsv_values_with_trackbar_in_loop()
-
-    # yellow_mask = cv2.inRange(hsv_image, lower_yellow, upper_yellow)
+    yellow_mask = cv2.inRange(hsv_image, lower_yellow, upper_yellow)
 
     if contours:
         for contour in contours:
@@ -197,6 +198,8 @@ for image_file in image_files:
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
         
     cv2.imshow('image_with_contours', image_with_contours)
-    cv2.waitKey(0)
+    k = cv2.waitKey(0)
+    if k == ord('q'):
+        cv2.destroyWindow('image_with_contours')
 cv2.destroyAllWindows()
 
