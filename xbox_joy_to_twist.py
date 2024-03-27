@@ -18,7 +18,7 @@ class JoyToTwist(Node):
         # Example mapping: left joystick vertical for linear velocity,
         # right joystick horizontal for angular velocity.
         twist.linear.x = msg.axes[1]
-        twist.angular.z = msg.axes[3]
+        twist.angular.z = msg.axes[3] * 3
         self.publisher_.publish(twist)
 
 def main(args=None):
