@@ -38,6 +38,7 @@ class ImageProcessor(Node):
             '/webcam/image/compressed',
             self.listener_callback,
             10)
+        # TODO try visualise compressed image in rviz again
         self.publisher_ = self.create_publisher(Image, 'webcam/processed_image', 10)
         self.edges_publisher_ = self.create_publisher(Image, 'webcam/edges_image', 10)
         self.cmd_vel_publisher_ = self.create_publisher(Twist, '/cmd_vel', 10)
